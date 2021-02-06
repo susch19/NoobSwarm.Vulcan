@@ -53,11 +53,8 @@ namespace Vulcan.NET
                 HidDevice ctrlDevice = devices.First(d => d.GetMaxFeatureReportLength() > 50);
                 HidStream ledStream = null;
                 HidStream ctrlStream = null;
-                var oc = new OpenConfiguration { };
-                oc.SetOption(OpenOption.Exclusive, true);
-                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen(oc, out ledStream) ?? false))
+                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen( out ledStream) ?? false))
                 {
-                    
                     VulcanKeyboard kb = new VulcanKeyboard(ledDevice, ledStream, ctrlDevice, ctrlStream);
                     if (kb.SendCtrlInitSequence())
                         return kb;
