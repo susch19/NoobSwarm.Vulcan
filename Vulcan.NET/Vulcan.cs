@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+
 using HidSharp;
 using HidSharp.Reports.Encodings;
 
@@ -51,9 +53,11 @@ namespace Vulcan.NET
                 HidDevice ctrlDevice = devices.First(d => d.GetMaxFeatureReportLength() > 50);
                 HidStream ledStream = null;
                 HidStream ctrlStream = null;
-
-                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen(out ledStream) ?? false))
+                var oc = new OpenConfiguration { };
+                oc.SetOption(OpenOption.Exclusive, true);
+                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen(oc, out ledStream) ?? false))
                 {
+                    
                     VulcanKeyboard kb = new VulcanKeyboard(ledDevice, ledStream, ctrlDevice, ctrlStream);
                     if (kb.SendCtrlInitSequence())
                         return kb;
@@ -90,6 +94,15 @@ namespace Vulcan.NET
         }
 
         /// <summary>
+        /// Set the colors of all the keys in the dictionary
+        /// </summary>
+        public void SetColors(Dictionary<int, Color> keyColors)
+        {
+            foreach (var key in keyColors)
+                SetKeyColor(key.Key, key.Value);
+        }
+
+        /// <summary>
         /// Sets a given key to a given color
         /// </summary>
         public void SetKeyColor(Key key, Color clr)
@@ -101,9 +114,23 @@ namespace Vulcan.NET
         }
 
         /// <summary>
+        /// Sets a given key to a given color
+        /// </summary>
+        public void SetKeyColor(int key, Color clr)
+        {
+            int offset = ((int)key / 12 * 36) + ((int)key % 12);
+            _keyColors[offset + 0] = clr.R;
+            _keyColors[offset + 12] = clr.G;
+            _keyColors[offset + 24] = clr.B;
+        }
+
+        /// <summary>
         /// Writes data to the keyboard
         /// </summary>
-        public bool Update() => WriteColorBuffer();
+        public async Task <bool> Update() { 
+            
+            return await Task.Run(()=>WriteColorBuffer()); 
+        }
 
         /// <summary>
         /// Disconnects from the keyboard. Call this last
@@ -141,30 +168,29 @@ namespace Vulcan.NET
             //0x00 * 1
             //data *64
 
-            byte[] packet = new byte[65];
+            byte[] packet = new byte[65*7];
 
             ColorPacketHeader.CopyTo(packet, 0);//header at the beginning of the first packet
             Array.Copy(_keyColors, 0,
                         packet, ColorPacketHeader.Length,
-                        60);//copy the first 60 bytes of color data to the packet
+                        65- ColorPacketHeader.Length);//copy the first 60 bytes of color data to the packet
                             //so 60 data + 5 header fits in a packet
             try
             {
-                _ledStream.Write(packet);
 
                 for (int i = 1; i <= 6; i++)//each chunk consists of the byte 0x00 and 64 bytes of data after that
                 {
-                    packet[0] = 0x00;
                     Array.Copy(_keyColors, (i * 64) - 4,//each packet holds 64 except for the first one, hence we subtract 4
-                                packet, 1,
+                                packet, i*65+1,
                                 64);
 
-                    _ledStream.Write(packet);
+                    //_ledStream.Write(packet);
                 }
+                _ledStream.Write(packet);
 
                 return true;
             }
-            catch
+            catch (Exception e)
             {
                 Disconnect();
                 return false;
@@ -174,25 +200,26 @@ namespace Vulcan.NET
         private bool SendCtrlInitSequence()
         {
             var result =
-                GetCtrlReport(0x0f) &&
-                SetCtrlReport(CtrlReports._0x15) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x05) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x07) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x0a) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x0b) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x06) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x09) &&
-                WaitCtrlDevice() &&
+                //GetCtrlReport(0x0f) &&
+                //SetCtrlReport(CtrlReports._0x15) &&
+                //WaitCtrlDevice() &&
+                //SetCtrlReport(CtrlReports._0x05) &&
+                //WaitCtrlDevice() &&
+                //SetCtrlReport(CtrlReports._0x07) &&
+                //WaitCtrlDevice() &&
+                //SetCtrlReport(CtrlReports._0x0a) &&
+                //WaitCtrlDevice() &&
+                //SetCtrlReport(CtrlReports._0x0b) &&
+                //WaitCtrlDevice() &&
+                //SetCtrlReport(CtrlReports._0x06) &&
+                //WaitCtrlDevice() &&
+                //SetCtrlReport(CtrlReports._0x09) &&
+                //WaitCtrlDevice() &&
                 SetCtrlReport(CtrlReports._0x0d) &&
-                WaitCtrlDevice() &&
-                SetCtrlReport(CtrlReports._0x13) &&
-                WaitCtrlDevice();
+                WaitCtrlDevice() //&&
+                                 //SetCtrlReport(CtrlReports._0x13) &&
+                                 //WaitCtrlDevice()
+                ;
 
             _ctrlStream?.Close();
 
@@ -235,7 +262,6 @@ namespace Vulcan.NET
             buf[0] = 0x04;
             for (int i = 0; i < MaxTries; i++)
             {
-                Thread.Sleep(150);
                 try
                 {
                     _ctrlStream.GetFeature(buf);
@@ -246,6 +272,7 @@ namespace Vulcan.NET
                 {
                     return false;
                 }
+                Thread.Sleep(5);
             }
             return false;
         }
