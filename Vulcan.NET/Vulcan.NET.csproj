@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HidSharp" Version="2.1.0" />
+    <ProjectReference Include="..\..\HidSharp\HidSharp\HidSharp.NETStandard.csproj" />
   </ItemGroup>
 
 </Project>

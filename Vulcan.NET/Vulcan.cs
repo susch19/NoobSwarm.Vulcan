@@ -2,11 +2,13 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 
 using HidSharp;
 using HidSharp.Reports.Encodings;
+using HidSharp.Reports.Input;
 
 namespace Vulcan.NET
 {
@@ -15,6 +17,8 @@ namespace Vulcan.NET
     /// </summary>
     public sealed class VulcanKeyboard : IDisposable
     {
+        public event EventHandler<ByteEventArgs> KeyPressedReceived;
+
         private const int MaxTries = 100;
         private const int VendorId = 0x1E7D;
         private const uint LedUsagePage = 0x0001;
@@ -26,15 +30,32 @@ namespace Vulcan.NET
         private readonly HidStream _ledStream;
         private readonly HidDevice _ctrlDevice;
         private readonly HidStream _ctrlStream;
+        private readonly HidDevice _inputDevice;
+        private readonly HidStream _inputStream;
+        private readonly CancellationTokenSource _source;
+        private readonly HidDeviceInputReceiver _receiver;
+        private readonly Task _listenTask;
         private readonly byte[] _keyColors = new byte[444];//64 * 6 + 60
+        private static readonly List<HidStream> streamsToDispose = new List<HidStream>();
 
-        private VulcanKeyboard(HidDevice ledDevice, HidStream ledStream, HidDevice ctrlDevice, HidStream ctrlStream)
+        private VulcanKeyboard(HidDevice ledDevice, HidStream ledStream, HidDevice ctrlDevice, HidStream ctrlStream, HidDevice inputDevice, HidStream inputStream, HidDeviceInputReceiver receiver)
         {
             _ledDevice = ledDevice;
             _ledStream = ledStream;
             _ctrlDevice = ctrlDevice;
             _ctrlStream = ctrlStream;
+            _inputDevice = inputDevice;
+            _inputStream = inputStream;
+            _source = new CancellationTokenSource();
+            _receiver = receiver;
+            _receiver.Received += _receiver_Received;
         }
+
+        private void _receiver_Received(object sender, EventArgs e)
+        {
+        }
+
+
 
         /// <summary>
         /// Initializes the keyboard. Returns a keyboard object if initialized successfully or null otherwise
@@ -51,13 +72,58 @@ namespace Vulcan.NET
             {
                 HidDevice ledDevice = GetFromUsages(devices, LedUsagePage, LedUsage);
                 HidDevice ctrlDevice = devices.First(d => d.GetMaxFeatureReportLength() > 50);
+                var inputDevices = devices.Where(d => d.GetMaxInputReportLength() >= 5);
+
                 HidStream ledStream = null;
                 HidStream ctrlStream = null;
-                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen( out ledStream) ?? false))
+                HidStream inputStream = null;
+                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen(out ledStream) ?? false))
                 {
-                    VulcanKeyboard kb = new VulcanKeyboard(ledDevice, ledStream, ctrlDevice, ctrlStream);
+
+
+                    var data = inputDevices.First().GetReportDescriptor();
+                    var receiver = data.CreateHidDeviceInputReceiver();
+                    VulcanKeyboard kb = new VulcanKeyboard(ledDevice, ledStream, ctrlDevice, ctrlStream, inputDevices.First(), inputStream, receiver);
                     if (kb.SendCtrlInitSequence())
+                    {
+                        foreach (var item in inputDevices)
+                        {
+
+                            var data1 = item.GetReportDescriptor();
+                            var receiver1 = data.CreateHidDeviceInputReceiver();
+                            receiver1.Received += (a, b) =>
+                            {
+                                int offset = 0;
+
+                                while (true)
+                                {
+
+                                    if ((b.Bytes[1 + offset] + b.Bytes[4 + offset] == 6 && b.Bytes[3 + offset] == 255))
+                                    {
+                                        offset += 5;
+                                        continue;
+                                    }
+                                    if (b.Bytes.Length < offset + 5 || b.Bytes[0 + offset] + b.Bytes[1 + offset] + b.Bytes[2 + offset] + b.Bytes[3 + offset] + b.Bytes[4 + offset] == 0)
+                                        return;
+
+                                    kb.KeyPressedReceived?.Invoke(a, b);
+                                    Console.WriteLine("Recvd: " + string.Join(" ", b.Bytes.Take(10).Select(x => x.ToString("X2"))));
+                                    offset += 5;
+                                }
+
+                            };
+                            if (item.TryOpen(out var str))
+                            {
+                                receiver1.Start(str);
+                                streamsToDispose.Add(str);
+                            }
+                            else
+                                ;
+
+                        }
+
                         return kb;
+                    }
                 }
                 else
                 {
@@ -69,6 +135,11 @@ namespace Vulcan.NET
             { }
 
             return null;
+        }
+
+        private void StartListener()
+        {
+            _listenTask.Start();
         }
 
         #region Public Methods
@@ -124,9 +195,10 @@ namespace Vulcan.NET
         /// <summary>
         /// Writes data to the keyboard
         /// </summary>
-        public async Task <bool> Update() { 
-            
-            return await Task.Run(()=>WriteColorBuffer()); 
+        public async Task<bool> Update()
+        {
+
+            return await Task.Run(() => WriteColorBuffer());
         }
 
         /// <summary>
@@ -134,8 +206,12 @@ namespace Vulcan.NET
         /// </summary>
         public void Disconnect()
         {
-            _ctrlStream?.Close();
-            _ledStream?.Close();
+
+            _source?.Cancel();
+            streamsToDispose.ForEach(x => { x.Dispose(); });
+            _ctrlStream?.Dispose();
+            _ledStream?.Dispose();
+
         }
 
         #endregion
@@ -165,20 +241,20 @@ namespace Vulcan.NET
             //0x00 * 1
             //data *64
 
-            byte[] packet = new byte[65*7];
+            byte[] packet = new byte[65 * 7];
 
             ColorPacketHeader.CopyTo(packet, 0);//header at the beginning of the first packet
             Array.Copy(_keyColors, 0,
                         packet, ColorPacketHeader.Length,
-                        65- ColorPacketHeader.Length);//copy the first 60 bytes of color data to the packet
-                            //so 60 data + 5 header fits in a packet
+                        65 - ColorPacketHeader.Length);//copy the first 60 bytes of color data to the packet
+                                                       //so 60 data + 5 header fits in a packet
             try
             {
 
                 for (int i = 1; i <= 6; i++)//each chunk consists of the byte 0x00 and 64 bytes of data after that
                 {
                     Array.Copy(_keyColors, (i * 64) - 4,//each packet holds 64 except for the first one, hence we subtract 4
-                                packet, i*65+1,
+                                packet, i * 65 + 1,
                                 64);
 
                     //_ledStream.Write(packet);
@@ -198,8 +274,8 @@ namespace Vulcan.NET
         {
             var result =
                 //GetCtrlReport(0x0f) &&
-                //SetCtrlReport(CtrlReports._0x15) &&
-                //WaitCtrlDevice() &&
+                SetCtrlReport(CtrlReports._0x15) &&
+                WaitCtrlDevice() &&
                 //SetCtrlReport(CtrlReports._0x05) &&
                 //WaitCtrlDevice() &&
                 //SetCtrlReport(CtrlReports._0x07) &&
@@ -213,9 +289,10 @@ namespace Vulcan.NET
                 //SetCtrlReport(CtrlReports._0x09) &&
                 //WaitCtrlDevice() &&
                 SetCtrlReport(CtrlReports._0x0d) &&
-                WaitCtrlDevice() //&&
-                                 //SetCtrlReport(CtrlReports._0x13) &&
-                                 //WaitCtrlDevice()
+                WaitCtrlDevice()
+                &&
+                SetCtrlReport(CtrlReports._0x13) &&
+                WaitCtrlDevice()
                 ;
 
             _ctrlStream?.Close();
@@ -298,6 +375,7 @@ namespace Vulcan.NET
             }
             return null;
         }
+
         #endregion
 
         #region IDisposable Support
