@@ -85,7 +85,7 @@
         F9 = 78,
         EQUALS = 79,
         CLOSE_BRACKET = 80,
-        BACKSLASH = 81,//ANSI only
+        //BACKSLASH = 81,//ANSI only
         RIGHT_SHIFT = 82,
         APPLICATION_SELECT = 83,
         //Column 14
