@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 using HidSharp;
+using HidSharp.Reports;
 using HidSharp.Reports.Encodings;
 using HidSharp.Reports.Input;
 
@@ -37,7 +39,18 @@ namespace Vulcan.NET
 
     public class VolumeKnobArgs : EventArgs
     {
-        public VolumeKnobArgs(byte id, byte data)
+        public VolumeKnobArgs(byte id, bool isPressed)
+        {
+            Id = id;
+            IsPressed = isPressed;
+        }
+
+        public bool IsPressed { get; set; }
+        public byte Id { get; set; }
+    }
+    public class VolumeKnobFxArgs : EventArgs
+    {
+        public VolumeKnobFxArgs(byte id, byte data)
         {
             Id = id;
             Data = data;
@@ -46,16 +59,32 @@ namespace Vulcan.NET
         public byte Data { get; set; }
         public byte Id { get; set; }
     }
+    public class VolumeKnDirectionArgs : EventArgs
+    {
+        public VolumeKnDirectionArgs(byte id, bool data)
+        {
+            Id = id;
+            TurnedRight = data;
+            TurnedLeft = !data;
+        }
+
+
+        public bool TurnedRight { get; set; }
+        public bool TurnedLeft { get; set; }
+        public byte Id { get; set; }
+    }
+
 
     /// <summary>
     /// Class representing a vulcan Keyboard. Can only interface with one at a time
     /// </summary>
     public sealed class VulcanKeyboard : IDisposable
     {
-        public event EventHandler<ByteEventArgs> KeyPressedReceived;
         public event EventHandler<TestArgs> TestKeyPressedReceived;
-        public event EventHandler<KeyPressedArgs> FinalKeyPressedReceived;
-        public event EventHandler<VolumeKnobArgs> FinalVolumeKnobPressedReceived;
+        public event EventHandler<KeyPressedArgs> KeyPressedReceived;
+        public event EventHandler<VolumeKnobArgs> VolumeKnobPressedReceived;
+        public event EventHandler<VolumeKnobFxArgs> VolumeKnobFxPressedReceived;
+        public event EventHandler<VolumeKnDirectionArgs> VolumeKnobTurnedReceived;
 
 
         private const int MaxTries = 100;
@@ -75,41 +104,35 @@ namespace Vulcan.NET
         private readonly HidDeviceInputReceiver _receiver;
         private readonly Task _listenTask;
         private readonly byte[] _keyColors = new byte[444];//64 * 6 + 60
-        private static readonly List<HidStream> streamsToDispose = new List<HidStream>();
+        private readonly List<HidStream> streamsToDispose = new List<HidStream>();
 
-        private VulcanKeyboard(HidDevice ledDevice, HidStream ledStream, HidDevice ctrlDevice, HidStream ctrlStream, HidDevice inputDevice, HidStream inputStream, HidDeviceInputReceiver receiver)
+        private VulcanKeyboard(HidDevice ledDevice, HidStream ledStream, HidDevice ctrlDevice, HidStream ctrlStream)
         {
             _ledDevice = ledDevice;
             _ledStream = ledStream;
             _ctrlDevice = ctrlDevice;
             _ctrlStream = ctrlStream;
-            _inputDevice = inputDevice;
-            _inputStream = inputStream;
             _source = new CancellationTokenSource();
-            _receiver = receiver;
-            _receiver.Received += _receiver_Received;
         }
 
-        private void _receiver_Received(object sender, EventArgs e)
-        {
-        }
 
 
         private static readonly byte[] normal_key_header = new byte[] { 0x03, 0x00, 0xFB };
         private static readonly byte[] easyshift_key_header = new byte[] { 0x03, 0x00, 0x0A };
         private static readonly byte[] volumneknob1_key_header = new byte[] { 0x03, 0x00, 0x0B };
         private static readonly byte[] volumneknob2_key_header = new byte[] { 0x03, 0x00, 0xCC };
+        private static readonly byte[] volumneknobfx_key_header = new byte[] { 0x03, 0x00, 0x0C };
 
         private static readonly Dictionary<byte, Key> KeyToKeyDataMapping = new Dictionary<byte, Key>()
         {
-            { 17, Key.ESC },
-            { 18, Key.TILDE },
-            { 20, Key.TAB },
-            { 22, Key.LEFT_SHIFT },
-            { 23, Key.LEFT_CONTROL },
-            { 19, Key.D1 },
-            { 26, Key.Q },
-            { 28, Key.A },
+            { 0x11, Key.ESC },
+            { 0x12, Key.TILDE },
+            { 0x14, Key.TAB },
+            { 0x16, Key.LEFT_SHIFT },
+            { 0x17, Key.LEFT_CONTROL },
+            { 0x13, Key.D1 },
+            { 0x1A, Key.Q },
+            { 0x1C, Key.A },
             { 29, Key.ISO_BACKSLASH },
             { 31, Key.LEFT_WINDOWS },
             { 16, Key.F1 },
@@ -218,6 +241,7 @@ namespace Vulcan.NET
 
             return array;
         }
+  
 
         /// <summary>
         /// Initializes the keyboard. Returns a keyboard object if initialized successfully or null otherwise
@@ -239,81 +263,28 @@ namespace Vulcan.NET
                 HidStream ledStream = null;
                 HidStream ctrlStream = null;
                 HidStream inputStream = null;
+                Func<ReportDescriptor, HidDeviceInputReceiver> generateHIDInputReceiver = (desc) =>
+                {
+                    return new HidDeviceInputReceiver(100, desc);
+                };
                 if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen(out ledStream) ?? false))
                 {
-                    var data = inputDevices.First().GetReportDescriptor();
-                    var receiver = data.CreateHidDeviceInputReceiver();
-                    VulcanKeyboard kb = new VulcanKeyboard(ledDevice, ledStream, ctrlDevice, ctrlStream, inputDevices.First(), inputStream, receiver);
+                    VulcanKeyboard kb = new VulcanKeyboard(ledDevice, ledStream, ctrlDevice, ctrlStream);
+
                     if (kb.SendCtrlInitSequence())
                     {
                         foreach (var item in inputDevices)
                         {
-
                             var data1 = item.GetReportDescriptor();
-                            var receiver1 = data.CreateHidDeviceInputReceiver();
-                            receiver1.Received += (a, b) =>
-                            {
-                                int offset = 0;
+                            //var receiver2= data1.CreateHidDeviceInputReceiver();
+                            var receiver1 = generateHIDInputReceiver(data1);
 
-                                while (true)
-                                {
-
-                                    if ((b.Bytes[1 + offset] + b.Bytes[4 + offset] == 6 && b.Bytes[3 + offset] == 255))
-                                    {
-                                        offset += 5;
-                                        continue;
-                                    }
-                                    if (b.Bytes.Length < offset + 5 || b.Bytes[0 + offset] + b.Bytes[1 + offset] + b.Bytes[2 + offset] + b.Bytes[3 + offset] + b.Bytes[4 + offset] == 0)
-                                        return;
-
-                                    kb.KeyPressedReceived?.Invoke(a, b);
-                                    //Console.WriteLine("Recvd: " + string.Join(" ", b.Bytes.Take(10).Select(x => x.ToString("X2"))));
-
-                                    if (b.Bytes.Length > 3)
-                                    {
-                                        var header_ = b.Bytes.Take(3);
-                                        var bb = b.Bytes.Skip(3).ToArray();
-                                        var data_ = TrimEnd(bb);
-                                        var key_ = bb[0];
-                                        var down = b.Bytes.Skip(4).First() == 1;
-
-                                        if (b.Bytes.Take(normal_key_header.Length).SequenceEqual(normal_key_header))
-                                        {
-                                            kb.FinalKeyPressedReceived?.Invoke(kb, new KeyPressedArgs(KeyToKeyDataMapping[key_], down));
-                                        }
-                                        else if (b.Bytes.Take(easyshift_key_header.Length).SequenceEqual(easyshift_key_header))
-                                        {
-                                            kb.FinalKeyPressedReceived?.Invoke(kb, new KeyPressedArgs(Key.CAPS_LOCK, down));
-                                        }
-                                        else if (b.Bytes.Take(volumneknob1_key_header.Length).SequenceEqual(volumneknob1_key_header))
-                                        {
-                                            kb.FinalVolumeKnobPressedReceived?.Invoke(kb, new VolumeKnobArgs(key_, data_.Last()));
-                                            //Console.WriteLine($"knop: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
-                                        }
-
-                                        kb.TestKeyPressedReceived?.Invoke(kb, new TestArgs(key_, down));
-                                        //if (header_.SequenceEqual(normal_key_header))
-                                        //{
-                                        //    Console.WriteLine($"Key {(down ? "down" : "up  ")}: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
-                                        //}
-                                        //else if (header_.SequenceEqual(volumneknob1_key_header))
-                                        //{
-                                        //    Console.WriteLine($"knop {(down ? "down" : "up  ")}: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
-                                        //}
-                                    }
-
-                                    offset += 5;
-                                }
-
-                            };
+                            receiver1.Received += kb.Receiver1Received;
                             if (item.TryOpen(out var str))
                             {
                                 receiver1.Start(str);
-                                streamsToDispose.Add(str);
+                                kb.streamsToDispose.Add(str);
                             }
-                            else
-                                ;
-
                         }
 
                         return kb;
@@ -331,6 +302,75 @@ namespace Vulcan.NET
             return null;
         }
 
+        private void Receiver1Received(object sender, ByteEventArgs b)
+        {
+            int offset = 0;
+
+            var memory = new ReadOnlySpan<byte>(b.Bytes);
+
+            while (true)
+            {
+                var bytes = memory[offset..(offset + 5)];
+                
+                if ((bytes[1] + bytes[4] == 6 && bytes[3] == 255))
+                {
+                    offset += 5;
+                    continue;
+                }
+                if (bytes.Length < offset + 5 || bytes[0] + bytes[1 ] + bytes[2] + bytes[3] + bytes[4] == 0)
+                    return;
+
+                //KeyPressedReceived?.Invoke(sender, b);
+                //Console.WriteLine("Recvd: " + string.Join(" ", bytes.Take(10).Select(x => x.ToString("X2"))));a
+
+                if (bytes.Length > 3)
+                {
+                    var header_ = bytes[0..3];
+                    var bb = bytes[3..^0];
+                    var data = bytes[3];
+                    var key = bb[0];
+                    var down = bytes[4] > 0;
+
+                    if (bytes[0..(normal_key_header.Length)].SequenceEqual(normal_key_header))
+                    {
+                        KeyPressedReceived?.Invoke(this, new KeyPressedArgs(KeyToKeyDataMapping[key], down));
+                    }
+                    else if (bytes[0..(easyshift_key_header.Length)].SequenceEqual(easyshift_key_header))
+                    {
+                        KeyPressedReceived?.Invoke(this, new KeyPressedArgs(Key.CAPS_LOCK, down));
+                    }
+                    else if (bytes[0..(volumneknob1_key_header.Length)].SequenceEqual(volumneknob1_key_header))
+                    {
+                        VolumeKnobPressedReceived?.Invoke(this, new VolumeKnobArgs(key, down));
+                        //Console.WriteLine($"knop: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
+                    }
+                    else if (bytes[0..(volumneknobfx_key_header.Length)].SequenceEqual(volumneknobfx_key_header))
+                    {
+                        VolumeKnobFxPressedReceived?.Invoke(this, new VolumeKnobFxArgs(key, data));
+                    }
+                    else if (bytes[0..(volumneknob2_key_header.Length)].SequenceEqual(volumneknob2_key_header))
+                    {
+                        VolumeKnobTurnedReceived?.Invoke(this, new VolumeKnDirectionArgs(key, data < 128));
+                    }
+
+
+                    //TestKeyPressedReceived?.Invoke(this, new TestArgs(key, down));
+                    //if (header_.SequenceEqual(normal_key_header))
+                    //{
+                    //    Console.WriteLine($"Key {(down ? "down" : "up  ")}: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
+                    //}
+                    //else if (header_.SequenceEqual(volumneknob1_key_header))
+                    //{
+                    //    Console.WriteLine($"knop {(down ? "down" : "up  ")}: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
+                    //}
+                    //Console.WriteLine($"Recvd {DateTime.Now:HH:mm:ss}: " + string.Join(" ", bytes.ToArray().Select(x=>x.ToString("X2"))));
+                }
+
+                offset += 5;
+            }
+
+        }
+
         private void StartListener()
         {
             _listenTask.Start();
@@ -342,14 +382,14 @@ namespace Vulcan.NET
         /// </summary>
         public void SetColor(Color clr)
         {
-            foreach (Key key in (Key[])Enum.GetValues(typeof(Key)))
+            foreach (LedKey key in (LedKey[])Enum.GetValues(typeof(LedKey)))
                 SetKeyColor(key, clr);
         }
 
         /// <summary>
         /// Set the colors of all the keys in the dictionary
         /// </summary>
-        public void SetColors(Dictionary<Key, Color> keyColors)
+        public void SetColors(Dictionary<LedKey, Color> keyColors)
         {
             foreach (var key in keyColors)
                 SetKeyColor(key.Key, key.Value);
@@ -367,7 +407,7 @@ namespace Vulcan.NET
         /// <summary>
         /// Sets a given key to a given color
         /// </summary>
-        public void SetKeyColor(Key key, Color clr)
+        public void SetKeyColor(LedKey key, Color clr)
         {
             int offset = ((int)key / 12 * 36) + ((int)key % 12);
             _keyColors[offset + 0] = clr.R;
@@ -489,7 +529,7 @@ namespace Vulcan.NET
                 WaitCtrlDevice()
                 ;
 
-            _ctrlStream?.Close();
+            //_ctrlStream?.Close();
 
             return result;
         }

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <Authors>diogotr7</Authors>
     <Description>Control RGB on roccat vulcan 100/120</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -13,6 +13,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DocumentationFile>D:\Source\Vulcan.NET\Vulcan.NET\Vulcan.NET.xml</DocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.5.4" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="HidSharp">
