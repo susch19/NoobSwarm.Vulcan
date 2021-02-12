@@ -27,13 +27,13 @@ namespace Vulcan.NET
 
     public class KeyPressedArgs : EventArgs
     {
-        public KeyPressedArgs(Key key, bool isPressed)
+        public KeyPressedArgs(LedKey key, bool isPressed)
         {
             Key = key;
             IsPressed = isPressed;
         }
 
-        public Key Key { get; set; }
+        public LedKey Key { get; set; }
         public bool IsPressed { get; set; }
     }
 
@@ -119,129 +119,121 @@ namespace Vulcan.NET
 
         private static readonly byte[] normal_key_header = new byte[] { 0x03, 0x00, 0xFB };
         private static readonly byte[] easyshift_key_header = new byte[] { 0x03, 0x00, 0x0A };
+        private static readonly byte[] easyshift2_key_header = new byte[] { 0x03, 0x00, 0xFD };
         private static readonly byte[] volumneknob1_key_header = new byte[] { 0x03, 0x00, 0x0B };
         private static readonly byte[] volumneknob2_key_header = new byte[] { 0x03, 0x00, 0xCC };
         private static readonly byte[] volumneknobfx_key_header = new byte[] { 0x03, 0x00, 0x0C };
 
-        private static readonly Dictionary<byte, Key> KeyToKeyDataMapping = new Dictionary<byte, Key>()
+        private static readonly Dictionary<byte, LedKey> KeyToKeyDataMapping = new Dictionary<byte, LedKey>()
         {
-            { 0x11, Key.ESC },
-            { 0x12, Key.TILDE },
-            { 0x14, Key.TAB },
-            { 0x16, Key.LEFT_SHIFT },
-            { 0x17, Key.LEFT_CONTROL },
-            { 0x13, Key.D1 },
-            { 0x1A, Key.Q },
-            { 0x1C, Key.A },
-            { 29, Key.ISO_BACKSLASH },
-            { 31, Key.LEFT_WINDOWS },
-            { 16, Key.F1 },
-            { 25, Key.D2 },
-            { 27, Key.W },
-            { 37, Key.S },
-            { 38, Key.Z },
-            { 39, Key.LEFT_ALT },
-            { 24, Key.F2 },
-            { 34, Key.D3 },
-            { 36, Key.E },
-            { 44, Key.D },
-            { 45, Key.X },
-            { 33, Key.F3 },
-            { 35, Key.D4 },
-            { 43, Key.R },
-            { 53, Key.F },
-            { 46, Key.C },
-            { 32, Key.F4 },
-            { 42, Key.D5 },
-            { 51, Key.T },
-            { 52, Key.G },
-            { 54, Key.V },
-            { 41, Key.D6 },
-            { 59, Key.Y },
-            { 61, Key.H },
-            { 62, Key.B },
-            { 63, Key.SPACE },
-            { 40, Key.F5 },
-            { 49, Key.D7 },
-            { 60, Key.U },
-            { 68, Key.J },
-            { 71, Key.N },
-            { 48, Key.F6 },
-            { 66, Key.D8 },
-            { 67, Key.I },
-            { 69, Key.K },
-            { 70, Key.M },
-            { 56, Key.F7 },
-            { 65, Key.D9 },
-            { 76, Key.O },
-            { 77, Key.L },
-            { 78, Key.OEMCOMMA },
-            { 57, Key.F8 },
-            { 74, Key.D0 },
-            { 84, Key.P },
-            { 85, Key.SEMICOLON },
-            { 86, Key.OEMPERIOD },
-            { 103, Key.RIGHT_ALT },
-            { 75, Key.OEMMINUS },
-            { 91, Key.OPEN_BRACKET },
-            { 93, Key.APOSTROPHE },
-            { 94, Key.FORWARD_SLASH },
-            { 119, Key.FN_Key },
-            { 64, Key.F9 },
-            { 83, Key.EQUALS },
-            { 92, Key.CLOSE_BRACKET },
+            { 0x11, LedKey.ESC },
+            { 0x12, LedKey.TILDE },
+            { 0x14, LedKey.TAB },
+            { 0x16, LedKey.LEFT_SHIFT },
+            { 0x17, LedKey.LEFT_CONTROL },
+            { 0x13, LedKey.D1 },
+            { 0x1A, LedKey.Q },
+            { 0x1C, LedKey.A },
+            { 29, LedKey.ISO_BACKSLASH },
+            { 31, LedKey.LEFT_WINDOWS },
+            { 16, LedKey.F1 },
+            { 25, LedKey.D2 },
+            { 27, LedKey.W },
+            { 37, LedKey.S },
+            { 38, LedKey.Z },
+            { 39, LedKey.LEFT_ALT },
+            { 24, LedKey.F2 },
+            { 34, LedKey.D3 },
+            { 36, LedKey.E },
+            { 44, LedKey.D },
+            { 45, LedKey.X },
+            { 33, LedKey.F3 },
+            { 35, LedKey.D4 },
+            { 43, LedKey.R },
+            { 53, LedKey.F },
+            { 46, LedKey.C },
+            { 32, LedKey.F4 },
+            { 42, LedKey.D5 },
+            { 51, LedKey.T },
+            { 52, LedKey.G },
+            { 54, LedKey.V },
+            { 41, LedKey.D6 },
+            { 59, LedKey.Y },
+            { 61, LedKey.H },
+            { 62, LedKey.B },
+            { 63, LedKey.SPACE },
+            { 40, LedKey.F5 },
+            { 49, LedKey.D7 },
+            { 60, LedKey.U },
+            { 68, LedKey.J },
+            { 71, LedKey.N },
+            { 48, LedKey.F6 },
+            { 66, LedKey.D8 },
+            { 67, LedKey.I },
+            { 69, LedKey.K },
+            { 70, LedKey.M },
+            { 56, LedKey.F7 },
+            { 65, LedKey.D9 },
+            { 76, LedKey.O },
+            { 77, LedKey.L },
+            { 78, LedKey.OEMCOMMA },
+            { 57, LedKey.F8 },
+            { 74, LedKey.D0 },
+            { 84, LedKey.P },
+            { 85, LedKey.SEMICOLON },
+            { 86, LedKey.OEMPERIOD },
+            { 103, LedKey.RIGHT_ALT },
+            { 75, LedKey.OEMMINUS },
+            { 91, LedKey.OPEN_BRACKET },
+            { 93, LedKey.APOSTROPHE },
+            { 94, LedKey.FORWARD_SLASH },
+            { 119, LedKey.FN_Key },
+            { 64, LedKey.F9 },
+            { 83, LedKey.EQUALS },
+            { 92, LedKey.CLOSE_BRACKET },
             //{ 100, Key.BACKSLASH }, // ANSI only
-            { 110, Key.RIGHT_SHIFT },
-            { 127, Key.APPLICATION_SELECT },
-            { 72, Key.F10 },
-            { 80, Key.F11 },
-            { 81, Key.F12 },
-            { 73, Key.BACKSPACE },
-            { 107, Key.ENTER },
-            { 135, Key.RIGHT_CONTROL },
-            { 100, Key.ISO_HASH },
-            { 88, Key.PRINT_SCREEN },
-            { 89, Key.INSERT },
-            { 90, Key.DELETE },
-            { 109, Key.ARROW_LEFT },
-            { 96, Key.SCROLL_LOCK },
-            { 97, Key.HOME },
-            { 98, Key.END },
-            { 108, Key.ARROW_UP },
-            { 117, Key.ARROW_DOWN },
-            { 104, Key.PAUSE_BREAK },
-            { 105, Key.PAGE_UP },
-            { 106, Key.PAGE_DOWN },
-            { 125, Key.ARROW_RIGHT },
-            { 113, Key.NUM_LOCK },
-            { 114, Key.NUMPAD7 },
-            { 115, Key.NUMPAD4 },
-            { 116, Key.NUMPAD1 },
-            { 133, Key.NUMPAD0 },
-            { 121, Key.DIVIDE },
-            { 122, Key.NUMPAD8 },
-            { 123, Key.NUMPAD5 },
-            { 124, Key.NUMPAD2 },
-            { 129, Key.MULTIPLY },
-            { 130, Key.NUMPAD9 },
-            { 131, Key.NUMPAD6 },
-            { 132, Key.NUMPAD3 },
-            { 141, Key.DECIMAL },
-            { 137, Key.SUBTRACT },
-            { 138, Key.ADD },
-            { 140, Key.NUM_ENTER },
+            { 110, LedKey.RIGHT_SHIFT },
+            { 127, LedKey.APPLICATION_SELECT },
+            { 72, LedKey.F10 },
+            { 80, LedKey.F11 },
+            { 81, LedKey.F12 },
+            { 73, LedKey.BACKSPACE },
+            { 107, LedKey.ENTER },
+            { 135, LedKey.RIGHT_CONTROL },
+            { 100, LedKey.ISO_HASH },
+            { 88, LedKey.PRINT_SCREEN },
+            { 89, LedKey.INSERT },
+            { 90, LedKey.DELETE },
+            { 109, LedKey.ARROW_LEFT },
+            { 96, LedKey.SCROLL_LOCK },
+            { 97, LedKey.HOME },
+            { 98, LedKey.END },
+            { 108, LedKey.ARROW_UP },
+            { 117, LedKey.ARROW_DOWN },
+            { 104, LedKey.PAUSE_BREAK },
+            { 105, LedKey.PAGE_UP },
+            { 106, LedKey.PAGE_DOWN },
+            { 125, LedKey.ARROW_RIGHT },
+            { 113, LedKey.NUM_LOCK },
+            { 114, LedKey.NUMPAD7 },
+            { 115, LedKey.NUMPAD4 },
+            { 116, LedKey.NUMPAD1 },
+            { 133, LedKey.NUMPAD0 },
+            { 121, LedKey.DIVIDE },
+            { 122, LedKey.NUMPAD8 },
+            { 123, LedKey.NUMPAD5 },
+            { 124, LedKey.NUMPAD2 },
+            { 129, LedKey.MULTIPLY },
+            { 130, LedKey.NUMPAD9 },
+            { 131, LedKey.NUMPAD6 },
+            { 132, LedKey.NUMPAD3 },
+            { 141, LedKey.DECIMAL },
+            { 137, LedKey.SUBTRACT },
+            { 138, LedKey.ADD },
+            { 140, LedKey.NUM_ENTER },
         };
 
 
-        public static byte[] TrimEnd(byte[] array)
-        {
-            int lastIndex = Array.FindLastIndex(array, b => b != 0);
-
-            Array.Resize(ref array, lastIndex + 1);
-
-            return array;
-        }
-  
 
         /// <summary>
         /// Initializes the keyboard. Returns a keyboard object if initialized successfully or null otherwise
@@ -305,23 +297,26 @@ namespace Vulcan.NET
         private void Receiver1Received(object sender, ByteEventArgs b)
         {
             int offset = 0;
-
-            var memory = new ReadOnlySpan<byte>(b.Bytes);
+            var memory = new ReadOnlySpan<byte>(b.Bytes, b.Offset, b.Count);
 
             while (true)
             {
+                if (offset + 4 > memory.Length)
+                    return;
+
                 var bytes = memory[offset..(offset + 5)];
-                
+                if (bytes[0] + bytes[1] + bytes[2] + bytes[3] + bytes[4] == 0)
+                {
+                    return;
+                }
+
                 if ((bytes[1] + bytes[4] == 6 && bytes[3] == 255))
                 {
                     offset += 5;
                     continue;
                 }
-                if (bytes.Length < offset + 5 || bytes[0] + bytes[1 ] + bytes[2] + bytes[3] + bytes[4] == 0)
-                    return;
+                //Console.WriteLine($"Recvd {DateTime.Now:HH:mm:ss}: " + string.Join(" ", bytes.ToArray().Select(x => x.ToString("X2"))));
 
-                //KeyPressedReceived?.Invoke(sender, b);
-                //Console.WriteLine("Recvd: " + string.Join(" ", bytes.Take(10).Select(x => x.ToString("X2"))));a
 
                 if (bytes.Length > 3)
                 {
@@ -337,12 +332,11 @@ namespace Vulcan.NET
                     }
                     else if (bytes[0..(easyshift_key_header.Length)].SequenceEqual(easyshift_key_header))
                     {
-                        KeyPressedReceived?.Invoke(this, new KeyPressedArgs(Key.CAPS_LOCK, down));
+                        KeyPressedReceived?.Invoke(this, new KeyPressedArgs(LedKey.CAPS_LOCK, !down));
                     }
                     else if (bytes[0..(volumneknob1_key_header.Length)].SequenceEqual(volumneknob1_key_header))
                     {
                         VolumeKnobPressedReceived?.Invoke(this, new VolumeKnobArgs(key, down));
-                        //Console.WriteLine($"knop: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
                     }
                     else if (bytes[0..(volumneknobfx_key_header.Length)].SequenceEqual(volumneknobfx_key_header))
                     {
@@ -363,12 +357,11 @@ namespace Vulcan.NET
                     //{
                     //    Console.WriteLine($"knop {(down ? "down" : "up  ")}: {key_:X2} -> \t\t" + string.Join(" ", data_.Select(x => $"{x:X2}")));
                     //}
-                    //Console.WriteLine($"Recvd {DateTime.Now:HH:mm:ss}: " + string.Join(" ", bytes.ToArray().Select(x=>x.ToString("X2"))));
+                    //Console.WriteLine($"Recvd {DateTime.Now:HH:mm:ss}: " + string.Join(" ", bytes.ToArray().Select(x => x.ToString("X2"))));
                 }
 
                 offset += 5;
             }
-
         }
 
         private void StartListener()
