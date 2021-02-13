@@ -86,6 +86,19 @@ namespace Vulcan.NET
         public event EventHandler<VolumeKnobFxArgs> VolumeKnobFxPressedReceived;
         public event EventHandler<VolumeKnDirectionArgs> VolumeKnobTurnedReceived;
 
+        public byte Brightness
+        {
+            get => brightness; set
+            {
+                if (value == brightness)
+                    return;
+                brightness = Math.Clamp((byte)value, (byte)0, (byte)69);
+                WriteColorBuffer();
+
+            }
+        }
+
+        private byte brightness = 69;
 
         private const int MaxTries = 100;
         private const int VendorId = 0x1E7D;
@@ -409,6 +422,7 @@ namespace Vulcan.NET
             return true;
         }
 
+
         /// <summary>
         /// Sets a given key to a given color
         /// </summary>
@@ -436,7 +450,7 @@ namespace Vulcan.NET
             return _keyColors.ToArray();
         }
 
-        
+
 
         /// <summary>
         /// Writes data to the keyboard
@@ -487,10 +501,22 @@ namespace Vulcan.NET
             //0x00 * 1
             //data *64
 
+            byte[] colorBrighntessAdjusted;
+            if (brightness == 69)
+                colorBrighntessAdjusted = _keyColors;
+            else
+            {
+                colorBrighntessAdjusted = new byte[_keyColors.Length];
+                for (int i = 0; i < colorBrighntessAdjusted.Length; i++)
+                {
+                    colorBrighntessAdjusted[i] = (byte)(_keyColors[i] / 69.0 * brightness);
+                }
+            }
+
             byte[] packet = new byte[65 * 7];
 
             ColorPacketHeader.CopyTo(packet, 0);//header at the beginning of the first packet
-            Array.Copy(_keyColors, 0,
+            Array.Copy(colorBrighntessAdjusted, 0,
                         packet, ColorPacketHeader.Length,
                         65 - ColorPacketHeader.Length);//copy the first 60 bytes of color data to the packet
                                                        //so 60 data + 5 header fits in a packet
@@ -499,7 +525,7 @@ namespace Vulcan.NET
 
                 for (int i = 1; i <= 6; i++)//each chunk consists of the byte 0x00 and 64 bytes of data after that
                 {
-                    Array.Copy(_keyColors, (i * 64) - 4,//each packet holds 64 except for the first one, hence we subtract 4
+                    Array.Copy(colorBrighntessAdjusted, (i * 64) - 4,//each packet holds 64 except for the first one, hence we subtract 4
                                 packet, i * 65 + 1,
                                 64);
 
