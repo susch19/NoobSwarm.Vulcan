@@ -397,6 +397,18 @@ namespace Vulcan.NET
                 SetKeyColor(key.Key, key.Value);
         }
 
+        public bool SetColors(ReadOnlySpan<byte> keyColors)
+        {
+            if (keyColors.Length != _keyColors.Length)
+                return false;
+
+            for (int i = 0; i < keyColors.Length; i++)
+            {
+                _keyColors[i] = keyColors[i];
+            }
+            return true;
+        }
+
         /// <summary>
         /// Sets a given key to a given color
         /// </summary>
@@ -418,6 +430,13 @@ namespace Vulcan.NET
             _keyColors[offset + 12] = clr.G;
             _keyColors[offset + 24] = clr.B;
         }
+
+        public byte[] GetLastSendColorsCopy()
+        {
+            return _keyColors.ToArray();
+        }
+
+        
 
         /// <summary>
         /// Writes data to the keyboard
