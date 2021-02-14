@@ -6,10 +6,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using HidSharp;
-using HidSharp.Reports;
-using HidSharp.Reports.Encodings;
-using HidSharp.Reports.Input;
+using NoobSwarm.Hid;
+using NoobSwarm.Hid.Reports;
+using NoobSwarm.Hid.Reports.Encodings;
+using NoobSwarm.Hid.Reports.Input;
 
 namespace Vulcan.NET
 {
