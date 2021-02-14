@@ -20,18 +20,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NoobSwarm.Hid" Version="0.1.0.7" />
     <PackageReference Include="System.Memory" Version="4.5.4" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="NoobSwarm.Hid">
-      <HintPath>..\..\NoobSwarm.Hid\NoobSwarm.Hid\bin\Debug\NoobSwarm.Hid.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <Import Project="..\NoobSwarm.Litgit.targets" Condition="Exists('..\NoobSwarm.Litgit.targets')" />
+
 
 </Project>

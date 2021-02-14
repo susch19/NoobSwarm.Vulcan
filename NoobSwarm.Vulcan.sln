@@ -1,8 +1,14 @@
-﻿Microsoft Visual Studio Solution File, Format Version 12.00
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29324.140
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NoobSwarm.Vulcan", "NoobSwarm.Vulcan\NoobSwarm.Vulcan.csproj", "{973D62BD-F65E-4097-9BF8-E22EF9D62D3B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{57B48626-6B00-4083-B3AB-DF6590C99C0F}"
+	ProjectSection(SolutionItems) = preProject
+		NoobSwarm.Litgit.targets = NoobSwarm.Litgit.targets
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
