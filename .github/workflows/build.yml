@@ -22,14 +22,20 @@ jobs:
     - name: Setup .NET Core
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 5.0.100
+        dotnet-version: 5.0.x
     - name: Get Git Submodules
       run: git submodule update --init --recursive
     - name: Build
       run: dotnet build --configuration Release
     - name: Create Nuget Package
       run: dotnet pack -c Release -o ./artifacts
+    - name: Publish Artifacts
+      uses: actions/upload-artifact@v2
+      if: matrix.os == 'ubuntu-latest'
+      with:
+        path: ./artifacts/*.nupkg
     - name: Deploy Nuget Package
       run: dotnet nuget push ./artifacts/'*.nupkg' -k $NUGET_API_KEY -s https://api.nuget.org/v3/index.json
       shell: bash
+      continue-on-error: true
       if: matrix.os == 'ubuntu-latest'

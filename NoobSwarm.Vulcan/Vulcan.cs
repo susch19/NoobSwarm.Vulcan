@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -94,8 +93,7 @@ namespace Vulcan.NET
                 if (value == brightness)
                     return;
                 brightness = Math.Clamp((byte)value, (byte)0, (byte)69);
-                WriteColorBuffer();
-
+                _ = Update().GetAwaiter().GetResult();
             }
         }
 
@@ -119,6 +117,9 @@ namespace Vulcan.NET
         private readonly Task _listenTask;
         private readonly byte[] _keyColors = new byte[444];//64 * 6 + 60
         private readonly List<HidStream> streamsToDispose = new List<HidStream>();
+        private readonly AutoResetEvent updateOperationResetEvent = new(false);
+
+        private UpdateOperation updateOperation;
 
         private VulcanKeyboard(HidDevice ledDevice, HidStream ledStream, HidDevice ctrlDevice, HidStream ctrlStream)
         {
@@ -127,9 +128,13 @@ namespace Vulcan.NET
             _ctrlDevice = ctrlDevice;
             _ctrlStream = ctrlStream;
             _source = new CancellationTokenSource();
+
+            var updateOperationThread = new Thread(() => UpdateThread(_source.Token))
+            {
+                IsBackground = true
+            };
+            updateOperationThread.Start();
         }
-
-
 
         private static readonly byte[] normal_key_header = new byte[] { 0x03, 0x00, 0xFB };
         private static readonly byte[] easyshift_key_header = new byte[] { 0x03, 0x00, 0x0A };
@@ -247,8 +252,6 @@ namespace Vulcan.NET
             { 138, LedKey.ADD },
             { 140, LedKey.NUM_ENTER },
         };
-
-
 
         /// <summary>
         /// Initializes the keyboard. Returns a keyboard object if initialized successfully or null otherwise
@@ -456,15 +459,72 @@ namespace Vulcan.NET
             return _keyColors.ToArray();
         }
 
+        private class UpdateOperation : IDisposable
+        {
+            private readonly VulcanKeyboard keyboard;
+            private readonly byte[] brightnessAdjusted;
+            private readonly SemaphoreSlim updateDone;
+            private bool success;
 
+            public UpdateOperation(VulcanKeyboard keyboard, byte[] brightnessAdjusted)
+            {
+                this.keyboard = keyboard;
+                this.brightnessAdjusted = brightnessAdjusted;
+                this.updateDone = new SemaphoreSlim(0);
+            }
+
+            public void Dispose()
+            {
+                updateDone.Dispose();
+            }
+
+            public void DoUpdate()
+            {
+                success = keyboard.WriteColorBuffer(brightnessAdjusted);
+                updateDone.Release();
+            }
+
+            public async Task<bool> WaitAsync()
+            {
+                await updateDone.WaitAsync();
+                return success;
+            }
+        }
+
+        private UpdateOperation EnqueueUpdate(byte[] brightnessAdjusted)
+        {
+            var updateOperation = new UpdateOperation(this, brightnessAdjusted);
+            Interlocked.Exchange(ref this.updateOperation, updateOperation)?.Dispose();
+            updateOperationResetEvent.Set();
+            return updateOperation;
+        }
+
+        private void UpdateThread(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                if (!updateOperationResetEvent.WaitOne())
+                    continue;
+
+                var updateItem = Interlocked.Exchange(ref updateOperation, null);
+
+                updateItem?.DoUpdate();
+                Thread.Sleep(16);
+            }
+        }
 
         /// <summary>
         /// Writes data to the keyboard
         /// </summary>
         public async Task<bool> Update()
         {
-
-            return await Task.Run(() => WriteColorBuffer());
+            var adjusted = CreateBrightnessAdjustedBuffer();
+            var workItem = EnqueueUpdate(adjusted);
+            return await workItem.WaitAsync().ContinueWith((passthrough) =>
+            {
+                workItem.Dispose();
+                return passthrough.Result;
+            });
         }
 
         /// <summary>
@@ -483,7 +543,26 @@ namespace Vulcan.NET
         #endregion
 
         #region Private Hid Methods
-        private bool WriteColorBuffer()
+        private byte[] CreateBrightnessAdjustedBuffer()
+        {
+            byte[] brightnessAdjustedBuffer;
+
+            if (brightness == 69)
+            {
+                brightnessAdjustedBuffer = _keyColors.ToArray();
+            }
+            else
+            {
+                brightnessAdjustedBuffer = new byte[_keyColors.Length];
+                for (int i = 0; i < brightnessAdjustedBuffer.Length; i++)
+                {
+                    brightnessAdjustedBuffer[i] = (byte)(_keyColors[i] / 69.0 * brightness);
+                }
+            }
+            return brightnessAdjustedBuffer;
+        }
+
+        private bool WriteColorBuffer(byte[] brightnessAdjustedBuffer)
         {
             //structure of the data: 
             //header *5
@@ -507,22 +586,10 @@ namespace Vulcan.NET
             //0x00 * 1
             //data *64
 
-            byte[] colorBrighntessAdjusted;
-            if (brightness == 69)
-                colorBrighntessAdjusted = _keyColors;
-            else
-            {
-                colorBrighntessAdjusted = new byte[_keyColors.Length];
-                for (int i = 0; i < colorBrighntessAdjusted.Length; i++)
-                {
-                    colorBrighntessAdjusted[i] = (byte)(_keyColors[i] / 69.0 * brightness);
-                }
-            }
-
             byte[] packet = new byte[65 * 7];
 
             ColorPacketHeader.CopyTo(packet, 0);//header at the beginning of the first packet
-            Array.Copy(colorBrighntessAdjusted, 0,
+            Array.Copy(brightnessAdjustedBuffer, 0,
                         packet, ColorPacketHeader.Length,
                         65 - ColorPacketHeader.Length);//copy the first 60 bytes of color data to the packet
                                                        //so 60 data + 5 header fits in a packet
@@ -531,7 +598,7 @@ namespace Vulcan.NET
 
                 for (int i = 1; i <= 6; i++)//each chunk consists of the byte 0x00 and 64 bytes of data after that
                 {
-                    Array.Copy(colorBrighntessAdjusted, (i * 64) - 4,//each packet holds 64 except for the first one, hence we subtract 4
+                    Array.Copy(brightnessAdjustedBuffer, (i * 64) - 4,//each packet holds 64 except for the first one, hence we subtract 4
                                 packet, i * 65 + 1,
                                 64);
 
