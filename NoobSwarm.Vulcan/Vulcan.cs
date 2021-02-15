@@ -85,6 +85,7 @@ namespace Vulcan.NET
         public event EventHandler<VolumeKnobArgs> VolumeKnobPressedReceived;
         public event EventHandler<VolumeKnobFxArgs> VolumeKnobFxPressedReceived;
         public event EventHandler<VolumeKnDirectionArgs> VolumeKnobTurnedReceived;
+        public event EventHandler<VolumeKnDirectionArgs> DPITurnedReceived;
 
         public byte Brightness
         {
@@ -136,6 +137,7 @@ namespace Vulcan.NET
         private static readonly byte[] volumneknob1_key_header = new byte[] { 0x03, 0x00, 0x0B };
         private static readonly byte[] volumneknob2_key_header = new byte[] { 0x03, 0x00, 0xCC };
         private static readonly byte[] volumneknobfx_key_header = new byte[] { 0x03, 0x00, 0x0C };
+        private static readonly byte[] volumneknobdpi_key_header = new byte[] { 0x03, 0x00, 0xCA };
 
         private static readonly Dictionary<byte, LedKey> KeyToKeyDataMapping = new Dictionary<byte, LedKey>()
         {
@@ -358,6 +360,10 @@ namespace Vulcan.NET
                     else if (bytes[0..(volumneknob2_key_header.Length)].SequenceEqual(volumneknob2_key_header))
                     {
                         VolumeKnobTurnedReceived?.Invoke(this, new VolumeKnDirectionArgs(key, data < 128));
+                    }
+                    else if (bytes[0..(volumneknobdpi_key_header.Length)].SequenceEqual(volumneknobdpi_key_header))
+                    {
+                        DPITurnedReceived?.Invoke(this, new VolumeKnDirectionArgs(key, data < 128));
                     }
 
 
