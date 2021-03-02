@@ -106,13 +106,14 @@ namespace Vulcan.NET
         private static readonly int[] ProductIds = new int[] { 0x307A, 0x3098 };
         private static readonly byte[] ColorPacketHeader = new byte[5] { 0x00, 0xa1, 0x01, 0x01, 0xb4 };
 
-        private readonly HidDevice _ledDevice;
-        private readonly HidStream _ledStream;
-        private readonly HidDevice _ctrlDevice;
-        private readonly HidStream _ctrlStream;
+        private HidDevice _ledDevice;
+        private HidStream _ledStream;
+        private HidDevice _ctrlDevice;
+        private HidStream _ctrlStream;
         private readonly HidDevice _inputDevice;
         private readonly HidStream _inputStream;
-        private readonly CancellationTokenSource _source;
+        private CancellationTokenSource _source;
+        private Thread updateOperationThread;
         private readonly HidDeviceInputReceiver _receiver;
         private readonly Task _listenTask;
         private readonly byte[] _keyColors = new byte[444];//64 * 6 + 60
@@ -129,7 +130,7 @@ namespace Vulcan.NET
             _ctrlStream = ctrlStream;
             _source = new CancellationTokenSource();
 
-            var updateOperationThread = new Thread(() => UpdateThread(_source.Token))
+            updateOperationThread = new Thread(() => UpdateThread(_source.Token))
             {
                 IsBackground = true
             };
@@ -310,6 +311,73 @@ namespace Vulcan.NET
             { }
 
             return null;
+        }
+
+        public bool Connect()
+        {
+            var devices = DeviceList.Local.GetHidDevices(vendorID: VendorId)
+                    .Where(d => ProductIds.Any(id => id == d.ProductID));
+
+            if (!devices.Any())
+                return false;
+            Disconnect();
+
+            try
+            {
+                HidDevice ledDevice = GetFromUsages(devices, LedUsagePage, LedUsage);
+                HidDevice ctrlDevice = devices.First(d => d.GetMaxFeatureReportLength() > 50);
+                var inputDevices = devices.Where(d => d.GetMaxInputReportLength() >= 5);
+
+                HidStream ledStream = null;
+                HidStream ctrlStream = null;
+                HidStream inputStream = null;
+                Func<ReportDescriptor, HidDeviceInputReceiver> generateHIDInputReceiver = (desc) =>
+                {
+                    return new HidDeviceInputReceiver(100, desc);
+                };
+                if ((ctrlDevice?.TryOpen(out ctrlStream) ?? false) && (ledDevice?.TryOpen(out ledStream) ?? false))
+                {
+                    _ledDevice = ledDevice;
+                    _ledStream = ledStream;
+                    _ctrlDevice = ctrlDevice;
+                    _ctrlStream = ctrlStream;
+                    _source = new CancellationTokenSource();
+                    
+                    updateOperationThread = new Thread(() => UpdateThread(_source.Token))
+                    {
+                        IsBackground = true
+                    };
+                    updateOperationThread.Start();
+
+                    if (SendCtrlInitSequence())
+                    {
+                        foreach (var item in inputDevices)
+                        {
+                            var data1 = item.GetReportDescriptor();
+                            //var receiver2= data1.CreateHidDeviceInputReceiver();
+                            var receiver1 = generateHIDInputReceiver(data1);
+
+                            receiver1.Received += Receiver1Received;
+                            if (item.TryOpen(out var str))
+                            {
+                                receiver1.Start(str);
+                                streamsToDispose.Add(str);
+                            }
+                        }
+
+                        return true;
+                    }
+                }
+                else
+                {
+                    ctrlStream?.Close();
+                    ledStream?.Close();
+                }
+            }
+            catch
+            { }
+
+            return false;
         }
 
         private void Receiver1Received(object sender, ByteEventArgs b)
@@ -537,6 +605,7 @@ namespace Vulcan.NET
             streamsToDispose.ForEach(x => { x.Dispose(); });
             _ctrlStream?.Dispose();
             _ledStream?.Dispose();
+            
 
         }
 
