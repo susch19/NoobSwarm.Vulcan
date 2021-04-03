@@ -77,7 +77,7 @@ namespace Vulcan.NET
     /// <summary>
     /// Class representing a vulcan Keyboard. Can only interface with one at a time
     /// </summary>
-    public sealed class VulcanKeyboard : IDisposable
+    public sealed class VulcanKeyboard : IVulcanKeyboard, IDisposable
     {
         public event EventHandler<TestArgs> TestKeyPressedReceived;
         public event EventHandler<KeyPressedArgs> KeyPressedReceived;
@@ -93,7 +93,7 @@ namespace Vulcan.NET
                 if (value == brightness)
                     return;
                 brightness = Math.Clamp((byte)value, (byte)0, (byte)69);
-                _ = Update().GetAwaiter().GetResult();
+                //_ = Update().GetAwaiter().GetResult();
             }
         }
 
@@ -342,7 +342,7 @@ namespace Vulcan.NET
                     _ctrlDevice = ctrlDevice;
                     _ctrlStream = ctrlStream;
                     _source = new CancellationTokenSource();
-                    
+
                     updateOperationThread = new Thread(() => UpdateThread(_source.Token))
                     {
                         IsBackground = true
@@ -605,7 +605,7 @@ namespace Vulcan.NET
             streamsToDispose.ForEach(x => { x.Dispose(); });
             _ctrlStream?.Dispose();
             _ledStream?.Dispose();
-            
+
 
         }
 
